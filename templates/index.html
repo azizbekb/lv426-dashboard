@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Weyland-Yutani LV-426 daily extraction statistics and anomaly dashboard">
+  <title>LV-426 Extraction Monitor | Weyland-Yutani</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23071416'/%3E%3Crect x='8' y='8' width='48' height='48' fill='none' stroke='%23e2a63d' stroke-width='2'/%3E%3Ctext x='32' y='42' font-family='monospace' font-size='24' fill='%23e2a63d' text-anchor='middle'%3EWY%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div id="loadingBar" class="loading-bar" hidden></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <span>W</span><span>Y</span>
+      </div>
+      <div>
+        <div class="brand-name">WEYLAND-YUTANI</div>
+        <div class="brand-sub">LV-426 / Extraction Intelligence</div>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <div class="source-pill" id="sourcePill">
+        <span class="status-dot" id="sourceDot"></span>
+        <span id="sourceText">Connecting to workbook</span>
+      </div>
+      <div class="snapshot" id="snapshotText">Reading Data tab...</div>
+      <button class="btn btn-ghost" id="refreshBtn" type="button">
+        <span class="btn-icon" aria-hidden="true">&#8635;</span>
+        <span class="btn-label">Refresh data</span>
+      </button>
+      <button class="btn btn-primary" id="pdfBtn" type="button" disabled>
+        <span class="btn-icon" aria-hidden="true">&#8595;</span>
+        <span class="btn-label">Generate PDF report</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="error-banner" id="errorBanner" role="alert" hidden>
+    <div>
+      <strong>Dashboard data error</strong>
+      <span id="errorText"></span>
+    </div>
+    <button class="btn btn-small" id="retryBtn" type="button">Retry</button>
+  </div>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><span class="rule"></span> DAILY EXTRACTION MONITOR</div>
+        <h1>Ore output, outliers,<br><em>under surveillance.</em></h1>
+        <p class="hero-copy">
+          Live statistics from the formula-driven LV-426 generator. Change the scenario in
+          Google Sheets, refresh this view, and screen the resulting output for spikes and drops.
+        </p>
+      </div>
+      <div class="hero-aside">
+        <div class="stamp">READ ONLY</div>
+        <div class="hero-aside-line"><span>Source</span><a id="sourceLink" href="#" target="_blank" rel="noopener">Google Sheets</a></div>
+        <div class="hero-aside-line"><span>Coverage</span><strong id="coverageText">-</strong></div>
+        <div class="hero-aside-line"><span>Mine series</span><strong id="mineCountText">-</strong></div>
+        <div class="hero-aside-line"><span>Events configured</span><strong id="eventCountText">-</strong></div>
+      </div>
+    </section>
+
+    <section class="control-strip panel" aria-label="Analysis controls">
+      <div class="date-control">
+        <div class="control-label">Selected range</div>
+        <div class="date-fields">
+          <label>Start <input type="date" id="startDate"></label>
+          <span class="date-divider">to</span>
+          <label>End <input type="date" id="endDate"></label>
+          <button class="btn btn-secondary btn-small" id="applyRangeBtn" type="button">Apply</button>
+        </div>
+        <div class="preset-row" role="group" aria-label="Quick date ranges">
+          <button class="preset" data-days="30" type="button">30D</button>
+          <button class="preset" data-days="90" type="button">90D</button>
+          <button class="preset" data-days="180" type="button">180D</button>
+          <button class="preset" data-days="365" type="button">1Y</button>
+          <button class="preset" data-days="all" type="button">All data</button>
+        </div>
+      </div>
+      <div class="scenario-context">
+        <div class="ctx-item"><span>Distribution</span><strong id="ctxDistribution">-</strong></div>
+        <div class="ctx-item"><span>Trend</span><strong id="ctxTrend">-</strong></div>
+        <div class="ctx-item"><span>Active mines</span><strong id="ctxActive">-</strong></div>
+        <div class="ctx-item"><span>Seed</span><strong id="ctxSeed">-</strong></div>
+      </div>
+    </section>
+
+    <section class="kpi-grid" aria-label="Total output summary">
+      <article class="kpi panel">
+        <div class="kpi-label">Mean daily total</div>
+        <div class="kpi-value" id="kpiMean">-</div>
+        <div class="kpi-unit">tonnes / day</div>
+        <div class="kpi-foot" id="kpiMeanFoot">Selected range</div>
+      </article>
+      <article class="kpi panel">
+        <div class="kpi-label">Median daily total</div>
+        <div class="kpi-value" id="kpiMedian">-</div>
+        <div class="kpi-unit">tonnes / day</div>
+        <div class="kpi-foot" id="kpiMedianFoot">Robust centre</div>
+      </article>
+      <article class="kpi panel">
+        <div class="kpi-label">Standard deviation</div>
+        <div class="kpi-value" id="kpiStd">-</div>
+        <div class="kpi-unit">tonnes / day</div>
+        <div class="kpi-foot">Sample estimator (n-1)</div>
+      </article>
+      <article class="kpi panel">
+        <div class="kpi-label">Interquartile range</div>
+        <div class="kpi-value" id="kpiIqr">-</div>
+        <div class="kpi-unit">tonnes / day</div>
+        <div class="kpi-foot" id="kpiIqrFoot">Q3 - Q1</div>
+      </article>
+      <article class="kpi panel kpi-alert">
+        <div class="kpi-label">Method detections</div>
+        <div class="kpi-value" id="kpiAnomalies">-</div>
+        <div class="kpi-unit" id="kpiAnomalyUnit">across four methods</div>
+        <div class="kpi-foot" id="kpiAnomalyFoot">-</div>
+      </article>
+      <article class="kpi panel">
+        <div class="kpi-label">Observations</div>
+        <div class="kpi-value" id="kpiDays">-</div>
+        <div class="kpi-unit">daily records</div>
+        <div class="kpi-foot" id="kpiDaysFoot">-</div>
+      </article>
+    </section>
+
+    <div class="main-grid">
+      <section class="panel chart-panel" aria-labelledby="chartTitle">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">OUTPUT SIGNAL</div>
+            <h2 id="chartTitle">Daily extraction</h2>
+          </div>
+          <div class="chart-controls">
+            <label class="compact-label">Series
+              <select id="seriesSelect"></select>
+            </label>
+            <label class="compact-label">Chart
+              <select id="chartType">
+                <option value="line">Line</option>
+                <option value="bar">Bar</option>
+                <option value="stacked">Stacked mines</option>
+              </select>
+            </label>
+            <label class="compact-label">Trend
+              <select id="trendDegree">
+                <option value="1">Linear (1)</option>
+                <option value="2">Quadratic (2)</option>
+                <option value="3">Cubic (3)</option>
+                <option value="4">Quartic (4)</option>
+              </select>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="showOutliers" checked>
+              <span>Outliers</span>
+            </label>
+          </div>
+        </div>
+        <div class="chart-note" id="chartNote">Loading series...</div>
+        <div class="chart-wrap">
+          <canvas id="mainChart" aria-label="Daily output chart" role="img"></canvas>
+          <div class="chart-loading" id="chartLoading" hidden>
+            <span class="spinner"></span>
+            <span>Recalculating</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel methods-panel" aria-labelledby="methodsTitle">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">DETECTION CONFIG</div>
+            <h2 id="methodsTitle">Anomaly methods</h2>
+          </div>
+          <span class="micro-badge" id="methodBadge">4 active</span>
+        </div>
+        <form id="methodsForm" class="method-list">
+          <div class="method-card" data-method="iqr">
+            <label class="method-enable">
+              <input type="checkbox" data-enable="iqr" checked>
+              <span class="method-name">IQR rule</span>
+              <span class="method-tag">robust</span>
+            </label>
+            <div class="method-param">
+              <label>Fence multiplier <span class="hint">k</span></label>
+              <input type="number" data-param="iqr.multiplier" value="1.5" min="0.1" max="10" step="0.1">
+            </div>
+          </div>
+          <div class="method-card" data-method="zscore">
+            <label class="method-enable">
+              <input type="checkbox" data-enable="zscore" checked>
+              <span class="method-name">Z-score</span>
+              <span class="method-tag">parametric</span>
+            </label>
+            <div class="method-param">
+              <label>Absolute threshold <span class="hint">|z|</span></label>
+              <input type="number" data-param="zscore.threshold" value="3.0" min="0.5" max="20" step="0.1">
+            </div>
+          </div>
+          <div class="method-card" data-method="moving">
+            <label class="method-enable">
+              <input type="checkbox" data-enable="moving" checked>
+              <span class="method-name">Moving average</span>
+              <span class="method-tag">change</span>
+            </label>
+            <div class="method-param method-param-pair">
+              <label>Window <input type="number" data-param="moving.window" value="7" min="2" max="60" step="1"></label>
+              <label>Threshold % <input type="number" data-param="moving.threshold_pct" value="50" min="1" max="500" step="1"></label>
+            </div>
+          </div>
+          <div class="method-card" data-method="grubbs">
+            <label class="method-enable">
+              <input type="checkbox" data-enable="grubbs" checked>
+              <span class="method-name">Grubbs' test</span>
+              <span class="method-tag">extreme</span>
+            </label>
+            <div class="method-param">
+              <label>Significance <span class="hint">alpha</span></label>
+              <select data-param="grubbs.alpha">
+                <option value="0.10">0.10</option>
+                <option value="0.05" selected>0.05</option>
+                <option value="0.01">0.01</option>
+                <option value="0.001">0.001</option>
+              </select>
+            </div>
+          </div>
+        </form>
+        <button class="btn btn-primary btn-wide" id="applyMethodsBtn" type="button">Re-run detection</button>
+        <div class="method-summary" id="methodSummary">
+          <span>Waiting for the first analysis.</span>
+        </div>
+        <button class="text-button" id="warningsToggle" type="button" hidden>
+          <span id="warningsLabel">Small-sample notes</span>
+          <span aria-hidden="true">+</span>
+        </button>
+        <div class="warnings" id="warningsBox" hidden></div>
+      </aside>
+    </div>
+
+    <section class="panel table-panel" aria-labelledby="statsTitle">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">FLEET PERFORMANCE</div>
+          <h2 id="statsTitle">Summary statistics</h2>
+        </div>
+        <div class="panel-meta" id="statsMeta">Mean, sample standard deviation, median and IQR</div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="statsTable">
+          <thead>
+            <tr>
+              <th>Mine / series</th>
+              <th class="num">N</th>
+              <th class="num">Mean</th>
+              <th class="num">Std dev</th>
+              <th class="num">Median</th>
+              <th class="num">IQR</th>
+              <th class="num">Spikes</th>
+              <th class="num">Drops</th>
+              <th class="num">Hits</th>
+            </tr>
+          </thead>
+          <tbody id="statsBody">
+            <tr><td colspan="9" class="empty-cell">Loading statistics...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-foot">All values in tonnes per day. Hover a mine row to inspect its signal in the chart.</div>
+    </section>
+
+    <section class="panel table-panel" aria-labelledby="anomalyTitle">
+      <div class="panel-head anomaly-head">
+        <div>
+          <div class="panel-kicker">SURVEILLANCE LOG</div>
+          <h2 id="anomalyTitle">Detected anomalies</h2>
+        </div>
+        <div class="anomaly-filters">
+          <label class="compact-label">Method
+            <select id="anomalyMethodFilter">
+              <option value="all">All methods</option>
+              <option value="iqr">IQR rule</option>
+              <option value="zscore">Z-score</option>
+              <option value="moving">Moving average</option>
+              <option value="grubbs">Grubbs' test</option>
+            </select>
+          </label>
+          <label class="compact-label">Direction
+            <select id="anomalyTypeFilter">
+              <option value="all">Spikes and drops</option>
+              <option value="spike">Spikes only</option>
+              <option value="drop">Drops only</option>
+            </select>
+          </label>
+          <span class="result-count" id="anomalyCount">0 rows</span>
+        </div>
+      </div>
+      <div class="table-scroll anomaly-scroll">
+        <table class="data-table anomaly-table" id="anomalyTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Mine / series</th>
+              <th>Type</th>
+              <th class="num">Observed</th>
+              <th class="num">Baseline</th>
+              <th class="num">Deviation</th>
+              <th class="num">Deviation %</th>
+              <th>Method</th>
+            </tr>
+          </thead>
+          <tbody id="anomalyBody">
+            <tr><td colspan="8" class="empty-cell">Loading detections...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-foot">
+        Detection rows are method-specific. Multiple methods can flag the same observation; statistical signals require operational validation.
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div>
+        <strong>WEYLAND-YUTANI // EXTRACTION INTELLIGENCE</strong>
+        <span>Read-only analysis of the LV-426 generator. No spreadsheet values are modified.</span>
+      </div>
+      <div class="footer-right">
+        <span id="footerRange">Range -</span>
+        <span id="footerFetched">Snapshot -</span>
+      </div>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <div class="modal-backdrop" id="pdfOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pdfModalTitle">
+      <div class="modal-spinner"><span class="spinner large"></span></div>
+      <div class="panel-kicker">REPORT ENGINE</div>
+      <h2 id="pdfModalTitle">Building PDF report</h2>
+      <p id="pdfModalText">Rendering charts, summary tables, anomaly logs and detailed findings...</p>
+      <div class="modal-progress"><span></span></div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: weyland-extraction-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180
+    healthCheckPath: /healthz
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: MPLCONFIGDIR
+        value: /tmp/mplconfig
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: SPREADSHEET_ID
+        value: 1kKnoVzwH-ua29vyfNwk0OcqYyPDkRXe03sSHLRNgPGM
+      - key: CACHE_TTL_SECONDS
+        value: "45"
